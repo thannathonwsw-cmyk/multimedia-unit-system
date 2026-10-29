@@ -101,7 +101,7 @@ export default function App() {
         const nd = normalizeDB(remote); dbRef.current = nd; setDb(nd); saveDB(nd);
       } else { await pushDB(dbRef.current); setLastSync(nowISO()); }
       return null;
-    } catch (e: any) { return String(e?.message ?? e); }
+    } catch (e: any) { return (e?.stack ? String(e.stack).split("\n").slice(0, 4).join(" | ") : String(e?.message ?? e)); }
     finally { setConnecting(false); }
   }
   async function pullOnly(): Promise<void> {
