@@ -1,3 +1,6 @@
+import { bridgeEnabled } from "../lib/bridge";
+import { pullDB } from "../lib/filen";
+import { clearLocal, saveDB, normalizeDB } from "../lib/store";
 import React, { useState } from "react";
 import { DB, User, uid, nowISO } from "../types";
 import { Session, hashPassword, verifyPassword } from "../lib/auth";
@@ -59,6 +62,15 @@ export default function Login({ db, update, onLoggedIn, onLoginFail, onConnectFi
           <button className="btn primary" style={{ width: "100%" }} disabled={busy} onClick={submit}>
             {busy ? "กำลังตรวจสอบ..." : setup ? "สร้างแอดมินและเข้าสู่ระบบ" : "เข้าสู่ระบบ"}
           </button>
+                    {bridgeEnabled() && (
+            <button className="btn link" style={{ width: "100%", marginTop: 8 }} onClick={async () => {
+                      if (!window.confirm("ล้างข้อมูลในเบราว์เซอร์นี้แล้วดึงฐานข้อมูลส่วนกลางมาแทน?")) return;
+              clearLocal();
+              const remote = await pullDB();
+              if (remote) saveDB(normalizeDB(remote));
+              location.reload();
+            }}>🔄 ดึงข้อมูลส่วนกลางทับเครื่องนี้</button>
+          )}
           {setup && (
             <>
               <div className="row" style={{ justifyContent: "center", marginTop: 10 }}>

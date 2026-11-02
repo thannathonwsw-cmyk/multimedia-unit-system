@@ -1,3 +1,4 @@
+import { bridgeEnabled } from "./lib/bridge";
 import React, { useEffect, useRef, useState } from "react";
 import { DB, nowISO } from "./types";
 import { loadDB, saveDB, normalizeDB } from "./lib/store";
@@ -39,6 +40,27 @@ export default function App() {
     } else setCustomUrl(null);
     return () => { alive = false; };
   }, [prefs.bg]);
+    // ===== ซิงค์กลางอัตโนมัติผ่านสะพาน Google Drive =====
+  useEffect(() => {
+    if (!bridgeEnabled()) return;
+    setFilenOn(true);
+    let alive = true;
+    const softPull = async () => {
+      try {
+        const remote = await pullDB();
+        if (!alive || !remote || !remote.meta) return;
+        const localT = dbRef.current.meta?.lastSavedAt ?? "";
+        const remoteT = remote.meta?.lastSavedAt ?? "";
+        if (remoteT && remoteT > localT) {
+          const nd = normalizeDB(remote); dbRef.current = nd; setDb(nd); saveDB(nd);
+        }
+        setLastSync(nowISO());
+      } catch (e) { console.warn("soft pull ล้มเหลว", e); }
+    };
+    softPull();
+    const iv = setInterval(softPull, 15000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
 
   async function setCustomBg(blob: Blob | null) {
     if (blob) { await idbSet("custom-bg", blob); setCustomUrl(URL.createObjectURL(blob)); setPrefs({ bg: "custom" }); }
