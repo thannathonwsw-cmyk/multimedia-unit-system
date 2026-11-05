@@ -1,180 +1,230 @@
 import React, { useMemo, useState } from "react";
-import { DB } from "../types";
+import { DB, Row, STAFF_COLORS } from "../types";
 import { Session } from "../lib/auth";
-import { Badge, fmtDateTime } from "../ui";
+import { fmtDateTime, Badge } from "../ui";
 
-export type Alert = { level: "danger" | "warn" | "info"; title: string; detail: string; tab: string };
+export interface AlertItem { icon: string; text: string; sub: string; persons?: string[]; tab?: string; id?: string }
 
-const DAY = 86400000;
-const t = (s?: string) => (s ? new Date(s).getTime() : NaN);
-const daysUntil = (s?: string) => Math.ceil((t(s) - Date.now()) / DAY);
-const OPEN = ["ใหม่", "รับเรื่องแล้ว", "กำลังดำเนินการ", "รอข้อมูลเพิ่ม", "รอตรวจงาน"];
-const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const THAI_MONTH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-
-export function computeAlerts(db: DB): Alert[] {
-  const out: Alert[] = [];
-  for (const r of db.requests ?? []) {
-    if (!OPEN.includes(r.status)) continue;
-    const d = daysUntil(r.dueAt);
-    if (!isNaN(d)) {
-      if (d < 0) out.push({ level: "danger", title: `เลยกำหนด ${Math.abs(d)} วัน: ${r.title}`, detail: `กำหนด ${fmtDateTime(r.dueAt)} • ${r.requesterDept || "-"}`, tab: "requests" });
-      else if (d <= 7) out.push({ level: "warn", title: `ครบกำหนดใน ${d} วัน: ${r.title}`, detail: `กำหนด ${fmtDateTime(r.dueAt)} • สถานะ ${r.status}`, tab: "requests" });
-    }
-    const stale = Math.floor((Date.now() - t(r.updatedAt)) / DAY);
-    if (["กำลังดำเนินการ", "รอข้อมูลเพิ่ม"].includes(r.status) && stale >= 14)
-      out.push({ level: "warn", title: `งานไม่เคลื่อนไหว ${stale} วัน: ${r.title}`, detail: `สถานะ ${r.status}`, tab: "requests" });
+export function computeAlerts(db: DB): AlertItem[] {
+  const out: AlertItem[] = [];
+  const now = Date.now();
+  const week = 7 * 86400000;
+  const names = (r: Row) => [r.assignee1, r.assignee2, r.assignee3].filter(Boolean) as string[];
+  for (const r of db.requests) {
+    if (["เสร็จสิ้น", "ยกเลิก"].includes(r.status)) continue;
+    if (!r.dueAt) continue;
+    const t = new Date(r.dueAt).getTime();
+    if (t < now) out.push({ icon: "🔴", text: `เลยกำหนดส่ง: ${r.title}`, sub: `กำหนด ${fmtDateTime(r.dueAt)} • สถานะ ${r.status}`, persons: names(r), tab: "requests", id: r.id });
+    else if (t - now < week) out.push({ icon: "🟠", text: `ครบกำหนดใน ${Math.max(1, Math.ceil((t - now) / 86400000))} วัน: ${r.title}`, sub: `กำหนด ${fmtDateTime(r.dueAt)} • สถานะ ${r.status}`, persons: names(r), tab: "requests", id: r.id });
   }
-  for (const a of db.assets ?? []) {
-    for (const l of a.loans ?? []) {
-      if (l.returnedAt) continue;
-      const d = daysUntil(l.dueAt);
-      if (!isNaN(d)) {
-        if (d < 0) out.push({ level: "danger", title: `คืนเกินกำหนด ${Math.abs(d)} วัน: ${a.assetCode} ${a.name}`, detail: `ผู้ยืม ${l.borrower} • กำหนด ${fmtDateTime(l.dueAt)}`, tab: "assets" });
-        else if (d <= 7) out.push({ level: "warn", title: `ครบกำหนดคืนใน ${d} วัน: ${a.assetCode} ${a.name}`, detail: `ผู้ยืม ${l.borrower}`, tab: "assets" });
-      } else {
-        out.push({ level: "info", title: `ยังไม่ได้กำหนดวันคืน: ${a.assetCode} ${a.name}`, detail: `ผู้ยืม ${l.borrower}`, tab: "assets" });
-      }
-    }
-    const last = Math.max(t(a.updatedAt) || 0, ...((a.history ?? []).map((h: any) => t(h.at) || 0).concat([0])));
-    const idle = Math.floor((Date.now() - last) / DAY);
-    if (idle >= 90 && !["ตัดจำหน่าย", "สูญหาย"].includes(a.status))
-      out.push({ level: "info", title: `ครุภัณฑ์ไม่อัปเดตสถานะ ${idle} วัน: ${a.assetCode} ${a.name}`, detail: `สถานะปัจจุบัน ${a.status}`, tab: "assets" });
-    const w = daysUntil(a.warrantyUntil);
-    if (!isNaN(w) && w >= 0 && w <= 60)
-      out.push({ level: "info", title: `ประกันใกล้หมดใน ${w} วัน: ${a.assetCode} ${a.name}`, detail: `หมดประกัน ${fmtDateTime(a.warrantyUntil)}`, tab: "assets" });
+  for (const a of db.assets) for (const b of (a.borrows ?? [])) {
+    if (b.returnedAt || !b.dueAt) continue;
+    const t = new Date(b.dueAt).getTime();
+          if (t < now) out.push({ icon: "🔴", text: `คืนเกินกำหนด: ${a.name}`, sub: `ผู้ยืม ${b.borrower} • กำหนด ${fmtDateTime(b.dueAt)}`, persons: [b.borrower], tab: "assets", id: a.id });
+          else if (t - now < week) out.push({ icon: "🟠", text: `ครบกำหนดคืนใน ${Math.max(1, Math.ceil((t - now) / 86400000))} วัน: ${a.name}`, sub: `ผู้ยืม ${b.borrower}`, persons: [b.borrower], tab: "assets", id: a.id });
   }
-  const order: any = { danger: 0, warn: 1, info: 2 };
-  return out.sort((x, y) => order[x.level] - order[y.level]);
+  return out;
 }
 
-export default function Dashboard({ db, session, goTab }: { db: DB; session: Session; goTab: (t: string) => void }) {
-  const alerts = computeAlerts(db);
-  const now = new Date();
-  const [cur, setCur] = useState({ y: now.getFullYear(), m: now.getMonth() });
-  const [sel, setSel] = useState<string | null>(key(now));
+type Ev = { id: string; kind: string; title: string; date: string; from?: string; to?: string; persons: string[]; color: string; status?: string };
+type Props = { db: DB; session: Session; goTab: (t: string) => void; mine?: boolean };
 
-  const events = useMemo(() => {
-    const map: Record<string, { type: string; label: string }[]> = {};
-    const add = (s: string | undefined, type: string, label: string) => {
-      if (!s) return; const d = new Date(s); if (isNaN(+d)) return;
-      const k = key(d); (map[k] = map[k] || []).push({ type, label });
-    };
-    (db.requests ?? []).forEach(r => { if (OPEN.includes(r.status)) add(r.dueAt, "due", `ครบกำหนดส่ง: ${r.title}`); });
-    (db.requests ?? []).forEach(r => { if (r.status === "เสร็จสิ้น") add(r.completedAt, "done", `ส่งงานแล้ว: ${r.title}`); });
-    (db.assets ?? []).forEach(a => (a.loans ?? []).forEach((l: any) => { if (!l.returnedAt) add(l.dueAt, "ret", `กำหนดคืน: ${a.assetCode} ${a.name} (${l.borrower})`); }));
-    (db.worklogs ?? []).forEach(w => add(w.workAt, "work", `งาน: ${w.title}`));
-    return map;
-  }, [db]);
+export default function Dashboard({ db, session, goTab, mine }: Props) {
+  const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [dayView, setDayView] = useState<string | null>(null);
 
-  const reqs = db.requests ?? [];
-  const openReqs = reqs.filter(r => OPEN.includes(r.status));
-  const due7 = openReqs.filter(r => { const d = daysUntil(r.dueAt); return !isNaN(d) && d >= 0 && d <= 7; }).length;
-  const overdue = openReqs.filter(r => { const d = daysUntil(r.dueAt); return !isNaN(d) && d < 0; }).length;
-  const loansOpen = (db.assets ?? []).flatMap(a => (a.loans ?? []).filter((l: any) => !l.returnedAt).map((l: any) => ({ a, l })));
-  const loansOver = loansOpen.filter(x => { const d = daysUntil(x.l.dueAt); return !isNaN(d) && d < 0; }).length;
-  const published = (db.portfolio ?? []).filter(p => p.status === "เผยแพร่").length;
+  const staffNames = useMemo(() => db.staff.map(s => `${s.firstName} ${s.lastName}`), [db.staff]);
+  const colorOf = (name?: string) => {
+    if (!name) return "#94a3b8";
+    const i = staffNames.indexOf(name);
+    return i < 0 ? "#94a3b8" : (db.staff[i].color || STAFF_COLORS[i % STAFF_COLORS.length]);
+  };
+  const myName = useMemo(() => {
+    const s = db.staff.find(st => st.username && st.username === session.username);
+    return s ? `${s.firstName} ${s.lastName}` : undefined;
+  }, [db.staff, session.username]);
 
-  const firstDow = new Date(cur.y, cur.m, 1).getDay();
-  const daysInMonth = new Date(cur.y, cur.m + 1, 0).getDate();
-  const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
-  const todayKey = key(now);
-  const selItems = sel ? (events[sel] ?? []) : [];
+  const namesOf = (r: Row) => [r.assignee1, r.assignee2, r.assignee3].filter(Boolean) as string[];
 
-  const ongoing = [...openReqs].sort((a, b) => String(a.dueAt || "9999").localeCompare(String(b.dueAt || "9999"))).slice(0, 6);
-  const recent = (db.audit ?? []).slice(0, 6);
+  const allEvents = useMemo<Ev[]>(() => {
+    const evs: Ev[] = [];
+    for (const r of db.requests) {
+      const persons = namesOf(r);
+      const color = colorOf(persons[0]);
+      if (r.dueAt) evs.push({ id: "qd" + r.id, kind: "กำหนดส่ง", title: r.title, date: r.dueAt, from: r.dueAt, persons, color, status: r.status });
+      if (r.receivedAt) evs.push({ id: "qr" + r.id, kind: "รับงาน", title: r.title, date: r.receivedAt, persons, color, status: r.status });
+    }
+    for (const w of db.worklogs) {
+      const d = (w as any).date || (w as any).finishedAt || w.createdAt;
+      if (!d) continue;
+      const persons = namesOf(w);
+      evs.push({ id: "w" + w.id, kind: "งานผลิต", title: (w as any).title || "งานย้อนหลัง", date: d, from: (w as any).timeFrom, to: (w as any).timeTo, persons, color: colorOf(persons[0]) });
+    }
+    for (const a of db.assets) for (const b of (a.borrows ?? [])) {
+      if (!b.dueAt || b.returnedAt) continue;
+      evs.push({ id: "b" + b.id, kind: "กำหนดคืน", title: a.name, date: b.dueAt, from: b.dueAt, persons: [b.borrower], color: colorOf(b.borrower) });
+    }
+    return evs;
+  }, [db, staffNames]);
+
+  const events = useMemo(() => (mine && myName ? allEvents.filter(e => e.persons.includes(myName)) : allEvents), [allEvents, mine, myName]);
+
+  const dayKey = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const hhmm = (iso?: string) => (iso ? new Date(iso).toTimeString().slice(0, 5) : "");
+
+  const first = new Date(cursor.y, cursor.m, 1);
+  const startIdx = (first.getDay() + 6) % 7;
+  const daysIn = new Date(cursor.y, cursor.m + 1, 0).getDate();
+  const cells: (number | null)[] = [...Array(startIdx).fill(null), ...Array.from({ length: daysIn }, (_, i) => i + 1)];
+  const monthPrefix = `${cursor.y}-${String(cursor.m + 1).padStart(2, "0")}`;
+  const evOf = (day: number) => events.filter(e => dayKey(e.date) === `${monthPrefix}-${String(day).padStart(2, "0")}`);
+  const todayKey = dayKey(new Date().toISOString());
+  const dayEvents = dayView ? events.filter(e => dayKey(e.date) === dayView).sort((a, b) => (a.from ?? "99").localeCompare(b.from ?? "99")) : [];
+
+  const ongoing = db.requests.filter(r => r.status === "กำลังดำเนินการ");
+  const alerts = computeAlerts(db).filter(a => !mine || !myName || (a.persons ?? []).includes(myName));
+  const now = Date.now();
+  const due7 = db.requests.filter(r => !["เสร็จสิ้น", "ยกเลิก"].includes(r.status) && r.dueAt && new Date(r.dueAt).getTime() > now && new Date(r.dueAt).getTime() - now < 7 * 86400000).length;
+  const overdue = db.requests.filter(r => !["เสร็จสิ้น", "ยกเลิก"].includes(r.status) && r.dueAt && new Date(r.dueAt).getTime() < now).length;
+  const onLoan = db.assets.filter(a => (a.borrows ?? []).some((b: any) => !b.returnedAt)).length;
+  const loanOver = db.assets.reduce((n, a) => n + (a.borrows ?? []).filter((b: any) => !b.returnedAt && b.dueAt && new Date(b.dueAt).getTime() < now).length, 0);
+  const published = db.portfolio.filter(p => p.status === "เผยแพร่").length;
+  const monthLabel = new Date(cursor.y, cursor.m, 1).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
+  const thDate = (key: string) => new Date(key + "T00:00:00").toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  const Persons = ({ list }: { list: string[] }) => (
+    <span className="muted" style={{ fontSize: ".85em" }}>
+      {list.length
+        ? list.map(n => <span key={n} style={{ marginRight: 8, whiteSpace: "nowrap" }}><i className="pdot" style={{ background: colorOf(n) }} />{n}</span>)
+        : <span>ยังไม่ระบุผู้รับผิดชอบ</span>}
+    </span>
+  );
 
   return (
-    <div>
-      <div className="page-head">
-        <h2>ภาพรวมงาน • {session.displayName}</h2>
-        <span className="muted">{now.toLocaleDateString("th-TH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+    <div style={{ display: "grid", gap: 14 }}>
+      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+        <h2>ภาพรวมงาน • {session.displayName}{mine && myName ? ` (เฉพาะงานของ ${myName})` : ""}</h2>
+        <span className="muted">{new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card" onClick={() => goTab("requests")}><div className="num">{openReqs.length}</div><div className="lbl">งานค้างดำเนินการ</div></div>
-        <div className="stat-card warn" onClick={() => goTab("requests")}><div className="num">{due7}</div><div className="lbl">ครบกำหนดใน 7 วัน</div></div>
-        <div className="stat-card danger" onClick={() => goTab("requests")}><div className="num">{overdue}</div><div className="lbl">เลยกำหนดส่ง</div></div>
-        <div className="stat-card" onClick={() => goTab("assets")}><div className="num">{loansOpen.length}</div><div className="lbl">อุปกรณ์ถูกยืมอยู่</div></div>
-        <div className="stat-card danger" onClick={() => goTab("assets")}><div className="num">{loansOver}</div><div className="lbl">คืนเกินกำหนด</div></div>
-        <div className="stat-card" onClick={() => goTab("portfolio")}><div className="num">{published}</div><div className="lbl">ผลงานเผยแพร่</div></div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        {([
+          [ongoing.length, "งานค้างดำเนินการ", "#6d8bff"],
+          [due7, "ครบกำหนดใน 7 วัน", "#f59e0b"],
+          [overdue, "เลยกำหนดส่ง", "#ef4444"],
+          [onLoan, "อุปกรณ์ถูกยืมอยู่", "#6d8bff"],
+          [loanOver, "คืนเกินกำหนด", "#ef4444"],
+          [published, "ผลงานเผยแพร่", "#a06bff"],
+        ] as [number, string, string][]).map(([n, label, c], i) => (
+          <div key={i} className="card stat-card">
+            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: c }}>{n}</div>
+            <div className="muted">{label}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="dash-grid">
-        <div>
-          <div className="card">
-            <h3>📅 ปฏิทินงาน</h3>
-            <div className="row" style={{ marginBottom: 8 }}>
-              <button className="icon-btn" onClick={() => setCur(c => c.m === 0 ? { y: c.y - 1, m: 11 } : { ...c, m: c.m - 1 })}>‹</button>
-              <b>{THAI_MONTH[cur.m]} {cur.y + 543}</b>
-              <button className="icon-btn" onClick={() => setCur(c => c.m === 11 ? { y: c.y + 1, m: 0 } : { ...c, m: c.m + 1 })}>›</button>
-              <button className="btn" onClick={() => { setCur({ y: now.getFullYear(), m: now.getMonth() }); setSel(todayKey); }}>เดือนนี้</button>
-            </div>
-            <div className="cal">
-              {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map(d => <div className="dow" key={d}>{d}</div>)}
-              {cells.map((d, i) => {
-                if (d === null) return <div className="cal-day blank" key={"b" + i} />;
-                const k = `${cur.y}-${String(cur.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-                const evs = events[k] ?? [];
-                return (
-                  <div key={k} className={"cal-day" + (k === todayKey ? " today" : "") + (sel === k ? " sel" : "")} onClick={() => setSel(k)}>
+      <div className="dash-cols" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr)", gap: 14 }}>
+        <div className="card">
+          {!dayView ? (
+            <>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <h3>📅 ปฏิทินงาน {monthLabel}</h3>
+                <span className="row">
+                  <button className="icon-btn" onClick={() => setCursor(c => ({ y: c.m === 0 ? c.y - 1 : c.y, m: c.m === 0 ? 11 : c.m - 1 }))}>‹</button>
+                  <button className="icon-btn" onClick={() => { const d = new Date(); setCursor({ y: d.getFullYear(), m: d.getMonth() }); }}>เดือนนี้</button>
+                  <button className="icon-btn" onClick={() => setCursor(c => ({ y: c.m === 11 ? c.y + 1 : c.y, m: c.m === 11 ? 0 : c.m + 1 }))}>›</button>
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginTop: 10 }}>
+                {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map(d => <div key={d} className="muted" style={{ textAlign: "center", fontSize: ".8em" }}>{d}</div>)}
+                {cells.map((d, i) => d === null ? <div key={"e" + i} /> : (
+                  <button key={d} className={"cal-cell" + (dayKey(new Date(cursor.y, cursor.m, d).toISOString()) === todayKey ? " today" : "")}
+                    onClick={() => setDayView(`${monthPrefix}-${String(d).padStart(2, "0")}`)}>
                     {d}
-                    <span className="dots">
-                      {["due", "ret", "work", "done"].filter(tp => evs.some(e => e.type === tp)).map(tp => <span className={"dot " + tp} key={tp} />)}
+                    <span className="cal-dots">
+                      {Array.from(new Set(evOf(d).map(e => e.color))).slice(0, 4).map(c => <i key={c} style={{ background: c }} />)}
                     </span>
+                  </button>
+                ))}
+              </div>
+              <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                {db.staff.map((s, i) => (
+                  <span key={s.id} className="muted" style={{ fontSize: ".85em" }}>
+                    <i className="pdot" style={{ background: s.color || STAFF_COLORS[i % STAFF_COLORS.length] }} />{s.firstName} {s.lastName}
+                  </span>
+                ))}
+                <span className="muted" style={{ fontSize: ".8em" }}>• แตะวันที่เพื่อดูงานรายวัน</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                <h3>🗓️ {thDate(dayView)}</h3>
+                <button className="btn" onClick={() => setDayView(null)}>← กลับปฏิทินเดือน</button>
+              </div>
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {dayEvents.map(e => (
+                  <div key={e.id} className="day-bar" style={{ borderLeftColor: e.color }}>
+                    <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                      <strong>{e.title}</strong>
+                      <Badge>{e.kind}</Badge>
+                    </div>
+                    <div className="muted" style={{ fontSize: ".9em" }}>
+                      🕒 {e.from && e.to ? `${hhmm(e.from)} – ${hhmm(e.to)}` : e.from ? hhmm(e.from) : "ทั้งวัน"}
+                      {e.status ? ` • ${e.status}` : ""}
+                    </div>
+                    <Persons list={e.persons} />
                   </div>
-                );
-              })}
-            </div>
-            <div className="legend">
-              <span><i className="dot due" /> ครบกำหนดส่ง</span>
-              <span><i className="dot ret" /> กำหนดคืนอุปกรณ์</span>
-              <span><i className="dot work" /> นัด/ทำงาน</span>
-              <span><i className="dot done" /> ส่งงานแล้ว</span>
-            </div>
-            {sel && (
-              <div style={{ marginTop: 10 }}>
-                <b>วันที่ {sel.split("-")[2]}/{sel.split("-")[1]}/{Number(sel.split("-")[0]) + 543}</b>
-                {selItems.length === 0 ? <p className="muted">ไม่มีรายการในวันนี้</p> : (
-                  <ul style={{ margin: "6px 0", paddingLeft: 18 }}>
-                    {selItems.map((e, i) => <li key={i}>{e.label}</li>)}
-                  </ul>
-                )}
+                ))}
+                {dayEvents.length === 0 && <div className="muted">ไม่มีรายการในวันนี้</div>}
               </div>
-            )}
-          </div>
-
-          <div className="card">
-            <h3>🕒 กิจกรรมล่าสุด</h3>
-            {recent.length === 0 ? <p className="muted">ยังไม่มีกิจกรรม</p> : recent.map(r => (
-              <div className="alert-row info" key={r.id}>
-                <div><div className="t">{r.action}</div><div className="d">{fmtDateTime(r.at)} • {r.username} • {r.summary || r.entity}</div></div>
-              </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
 
-        <div>
+        <div style={{ display: "grid", gap: 14 }}>
           <div className="card">
             <h3>🔔 การแจ้งเตือน ({alerts.length})</h3>
-            {alerts.length === 0 ? <p className="muted">ไม่มีเรื่องค้างเคลียร์ 🎉</p> : alerts.slice(0, 10).map((a, i) => (
-              <div className={"alert-row " + a.level} key={i} style={{ cursor: "pointer" }} onClick={() => goTab(a.tab)}>
-                <div><div className="t">{a.level === "danger" ? "🔴" : a.level === "warn" ? "🟠" : "🔵"} {a.title}</div><div className="d">{a.detail}</div></div>
-              </div>
-            ))}
+            <div style={{ display: "grid", gap: 8 }}>
+              {alerts.map((a, i) => (
+                <div key={i} className="day-bar alert-click" style={{ borderLeftColor: a.icon === "🔴" ? "#ef4444" : "#f59e0b" }}
+                  title="คลิกเพื่อเปิดหน้างานนี้" onClick={() => a.tab && goTab(a.tab)}>
+                  <div>{a.icon} <strong>{a.text}</strong></div>
+                  <div className="muted" style={{ fontSize: ".85em" }}>{a.sub}</div>
+                  <Persons list={a.persons ?? []} />
+                </div>
+              ))}
+              {alerts.length === 0 && <div className="muted">ไม่มีการแจ้งเตือน</div>}
+            </div>
           </div>
 
           <div className="card">
             <h3>⚙️ งานที่กำลังดำเนินการ</h3>
-            {ongoing.length === 0 ? <p className="muted">ไม่มีงานค้าง</p> : ongoing.map(r => (
-              <div className="alert-row info" key={r.id}>
-                <div style={{ flex: 1 }}>
-                  <div className="t">{r.title}</div>
-                  <div className="d">กำหนด {fmtDateTime(r.dueAt)} • <Badge>{r.status}</Badge></div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {ongoing.map(r => (
+                <div key={r.id} className="day-bar" style={{ borderLeftColor: colorOf(namesOf(r)[0]) }}>
+                  <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                    <strong>{r.title}</strong>
+                    <button className="btn" onClick={() => goTab("requests")}>เปิด</button>
+                  </div>
+                  <div className="muted" style={{ fontSize: ".85em" }}>กำหนด {r.dueAt ? fmtDateTime(r.dueAt) : "-"}</div>
+                  <Persons list={namesOf(r)} />
                 </div>
-                <button className="btn" onClick={() => goTab("requests")}>เปิด</button>
-              </div>
-            ))}
+              ))}
+              {ongoing.length === 0 && <div className="muted">ไม่มีงานค้าง</div>}
+            </div>
+          </div>
+
+          <div className="card">
+            <h3>🕘 กิจกรรมล่าสุด</h3>
+            <div style={{ display: "grid", gap: 6 }}>
+              {db.audit.slice(-6).reverse().map(a => (
+                <div key={a.id} className="day-bar" style={{ borderLeftColor: "#6d8bff" }}>
+                  <strong>{a.action}</strong>
+                  <div className="muted" style={{ fontSize: ".85em" }}>{fmtDateTime(a.at)} • {a.username} • {a.summary ?? ""}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

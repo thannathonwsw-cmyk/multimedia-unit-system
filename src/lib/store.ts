@@ -5,7 +5,7 @@ const KEY = "mm-system-db-v1";
 export function normalizeDB(d: any): DB {
   const base = emptyDB();
   const out: DB = { ...base, ...d };
-  (["requests", "worklogs", "assets", "portfolio", "users", "audit"] as const).forEach(k => {
+    (["requests", "worklogs", "assets", "portfolio", "users", "audit", "staff"] as const).forEach(k => {
     if (!Array.isArray((out as any)[k])) (out as any)[k] = [];
   });
   out.meta = { ...base.meta, ...(d?.meta ?? {}) };

@@ -1,3 +1,5 @@
+import { Role } from "./lib/auth";
+
 export type Attachment = {
   id: string; name: string; size: number; mime: string; addedAt: string;
   localKey?: string; filenPath?: string;
@@ -9,10 +11,25 @@ export type Row = {
 };
 
 export type User = {
-  id: string; username: string; displayName: string;
-  role: "admin" | "user"; passHash: string; salt: string;
-  status: "active" | "disabled"; createdAt: string; updatedAt: string;
+  id: string;
+  username: string;
+  displayName: string;
+  role: Role;
+  salt: string;
+  hash: string;
+  createdAt: string;
 };
+export interface Staff {
+  id: string;
+  firstName: string;
+  lastName: string;
+  position?: string;
+  username?: string;   // เชื่อมโยงบัญชีล็อกอิน (ใช้กับโหมดงานของฉัน)
+  createdAt: string;
+  color?: string;
+}
+
+export const STAFF_COLORS = ["#6d8bff", "#ff6b81", "#22c55e", "#f59e0b", "#a06bff", "#06b6d4", "#f97316", "#ec4899"];
 
 export type AuditRow = {
   id: string; at: string; userId: string; username: string;
@@ -22,13 +39,13 @@ export type AuditRow = {
 export type DB = {
   version: 1;
   requests: Row[]; worklogs: Row[]; assets: Row[]; portfolio: Row[];
-  users: User[]; audit: AuditRow[];
+  users: User[]; staff: Staff[]; audit: AuditRow[];
   meta: { lastSavedAt?: string; lastSyncAt?: string };
 };
 
 export const emptyDB = (): DB => ({
   version: 1, requests: [], worklogs: [], assets: [], portfolio: [],
-  users: [], audit: [], meta: {}
+  users: [], staff: [], audit: [], meta: {}
 });
 
 export const uid = (): string =>

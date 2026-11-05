@@ -27,6 +27,7 @@ export async function verifyPassword(password: string, salt: string, hash: strin
 }
 
 export const can = {
+    edit: (r?: Role) => r === "admin",
   deleteRecord: (r?: Role) => r === "admin",
   importSheet: (r?: Role) => r === "admin",
   exportData: (r?: Role) => r === "admin",

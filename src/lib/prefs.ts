@@ -2,11 +2,12 @@ export type Prefs = {
   theme: "dark" | "light";
   bg: "aurora" | "sunset" | "stars" | "custom";
   fontScale: number;
+  viewMode?: "all" | "mine";
 };
 
 const KEY = "mm-prefs-v1";
 
-export const defaultPrefs: Prefs = { theme: "dark", bg: "aurora", fontScale: 1 };
+export const defaultPrefs: Prefs = { theme: "dark", bg: "aurora", fontScale: 1, viewMode: "all" };
 
 export const FONT_STEPS = [0.85, 0.9, 1, 1.1, 1.25];
 

@@ -67,6 +67,7 @@ export default function CrudPage({ dbKey, title, fields, columns, searchKeys, fi
               {columns.map(c => (
                 <td key={c.key}>
                   {c.key === "status" ? <Badge>{r.status || "-"}</Badge>
+                    : c.key === "assignees" ? ([r.assignee1, r.assignee2, r.assignee3].filter(Boolean).join(", ") || "-")
                     : /At$|Date$/.test(c.key) ? fmtDateTime(r[c.key])
                     : String(r[c.key] ?? "-")}
                 </td>
