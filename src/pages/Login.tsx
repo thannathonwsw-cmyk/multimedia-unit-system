@@ -40,8 +40,8 @@ export default function Login({ db, update, onLoggedIn, onLoginFail, onConnectFi
       } else {
         const u = (db.users ?? []).find(x => x.username === username.trim());
         if (!u) { setErr("ไม่พบชื่อผู้ใช้นี้"); onLoginFail(username); return; }
-        if (u.status !== "active") { setErr("บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อแอดมิน"); onLoginFail(username); return; }
-        const ok = await verifyPassword(password, u.salt, u.passHash);
+            if (u.status && u.status !== "active") { setErr("บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อแอดมิน"); onLoginFail(username); return; }
+            const ok = await verifyPassword(password, u.salt, u.passHash ?? (u.hash as string));
         if (!ok) { setErr("รหัสผ่านไม่ถูกต้อง"); onLoginFail(username); return; }
         onLoggedIn({ userId: u.id, username: u.username, displayName: u.displayName, role: u.role, loginAt: nowISO() });
       }

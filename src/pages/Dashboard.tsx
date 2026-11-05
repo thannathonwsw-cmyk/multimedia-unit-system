@@ -3,7 +3,7 @@ import { DB, Row, STAFF_COLORS } from "../types";
 import { Session } from "../lib/auth";
 import { fmtDateTime, Badge } from "../ui";
 
-export interface AlertItem { icon: string; text: string; sub: string; persons?: string[]; tab?: string; id?: string }
+export interface AlertItem { icon: string; text: string; sub: string; persons?: string[]; tab?: string; id?: string; level?: string }
 
 export function computeAlerts(db: DB): AlertItem[] {
   const out: AlertItem[] = [];
@@ -14,14 +14,14 @@ export function computeAlerts(db: DB): AlertItem[] {
     if (["เสร็จสิ้น", "ยกเลิก"].includes(r.status)) continue;
     if (!r.dueAt) continue;
     const t = new Date(r.dueAt).getTime();
-    if (t < now) out.push({ icon: "🔴", text: `เลยกำหนดส่ง: ${r.title}`, sub: `กำหนด ${fmtDateTime(r.dueAt)} • สถานะ ${r.status}`, persons: names(r), tab: "requests", id: r.id });
-    else if (t - now < week) out.push({ icon: "🟠", text: `ครบกำหนดใน ${Math.max(1, Math.ceil((t - now) / 86400000))} วัน: ${r.title}`, sub: `กำหนด ${fmtDateTime(r.dueAt)} • สถานะ ${r.status}`, persons: names(r), tab: "requests", id: r.id });
+    if (t < now) out.push({ icon: "🔴", text: `เลยกำหนดส่ง: ${r.title}`, sub: `กำหนด ${fmtDateTime(r.dueAt)} • สถานะ ${r.status}`, persons: names(r), tab: "requests", id: r.id , level: "over"});
+    else if (t - now < week) out.push({ icon: "🟠", text: `ครบกำหนดใน ${Math.max(1, Math.ceil((t - now) / 86400000))} วัน: ${r.title}`, sub: `กำหนด ${fmtDateTime(r.dueAt)} • สถานะ ${r.status}`, persons: names(r), tab: "requests", id: r.id , level: "warn"});
   }
   for (const a of db.assets) for (const b of (a.borrows ?? [])) {
     if (b.returnedAt || !b.dueAt) continue;
     const t = new Date(b.dueAt).getTime();
-          if (t < now) out.push({ icon: "🔴", text: `คืนเกินกำหนด: ${a.name}`, sub: `ผู้ยืม ${b.borrower} • กำหนด ${fmtDateTime(b.dueAt)}`, persons: [b.borrower], tab: "assets", id: a.id });
-          else if (t - now < week) out.push({ icon: "🟠", text: `ครบกำหนดคืนใน ${Math.max(1, Math.ceil((t - now) / 86400000))} วัน: ${a.name}`, sub: `ผู้ยืม ${b.borrower}`, persons: [b.borrower], tab: "assets", id: a.id });
+          if (t < now) out.push({ icon: "🔴", text: `คืนเกินกำหนด: ${a.name}`, sub: `ผู้ยืม ${b.borrower} • กำหนด ${fmtDateTime(b.dueAt)}`, persons: [b.borrower], tab: "assets", id: a.id , level: "over" });
+          else if (t - now < week) out.push({ icon: "🟠", text: `ครบกำหนดคืนใน ${Math.max(1, Math.ceil((t - now) / 86400000))} วัน: ${a.name}`, sub: `ผู้ยืม ${b.borrower}`, persons: [b.borrower], tab: "assets", id: a.id , level: "warn" });
   }
   return out;
 }

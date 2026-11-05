@@ -16,9 +16,12 @@ export type User = {
   displayName: string;
   role: Role;
   salt: string;
-  hash: string;
+  hash?: string;
+  passHash?: string;
+  status?: string;
   createdAt: string;
 };
+
 export interface Staff {
   id: string;
   firstName: string;
