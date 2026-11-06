@@ -23,7 +23,7 @@ const STATUS_COLOR: Record<string, string> = {
   "รอข้อมูลเพิ่มเติม": "#a06bff", "รอตรวจงาน": "#f97316", "เสร็จสิ้น": "#22c55e", "ยกเลิก": "#94a3b8",
 };
 
-export default function Login({ db, update, onLoggedIn, onLoginFail, onConnectFilen }: Props) {
+export default function Login({ db, update, onLoggedIn, onLoginFail }: Props) {
   const setup = (db.users ?? []).length === 0;
   const cfg = { ...defaultPortal(), ...(db.portal ?? {}) };
   const [mode, setMode] = useState<"portal" | "staff">("portal");
@@ -34,10 +34,7 @@ export default function Login({ db, update, onLoggedIn, onLoginFail, onConnectFi
   const [confirm, setConfirm] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [showFilen, setShowFilen] = useState(false);
-  const [fEmail, setFEmail] = useState("");
-  const [fPass, setFPass] = useState("");
-  const [fTwo, setFTwo] = useState("");
+  const [showPass, setShowPass] = useState(false);
 
   const [reqOpen, setReqOpen] = useState(false);
   const [rq, setRq] = useState({ requesterName: "", requesterDept: "", phone: "", detail: "", date: "", timeFrom: "", timeTo: "" });
@@ -217,39 +214,29 @@ export default function Login({ db, update, onLoggedIn, onLoginFail, onConnectFi
     );
   }
 
-  if (mode === "staff") {
+    if (mode === "staff") {
     return (
       <div className="login-wrap page-enter">
         <div className="modal" style={{ maxWidth: 430 }}>
           <div className="modal-head"><h3>🔐 เข้าสู่ระบบงานสื่อมัลติมีเดีย</h3></div>
           <div className="modal-body">
             <div className="field"><label>ชื่อผู้ใช้ (username)</label><input value={username} onChange={e => setUsername(e.target.value)} /></div>
-            <div className="field"><label>รหัสผ่าน</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} /></div>
+            <div className="field">
+              <label>รหัสผ่าน</label>
+              <div className="row" style={{ gap: 6 }}>
+                <input style={{ flex: 1 }} type={showPass ? "text" : "password"} value={password}
+                  onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
+                <button type="button" className="icon-btn" title={showPass ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                  onClick={() => setShowPass(s => !s)}>{showPass ? "🙈" : "👁️"}</button>
+              </div>
+            </div>
             {err && <p className="error">{err}</p>}
-            <button className="btn primary" style={{ width: "100%" }} disabled={busy} onClick={submit}>
+            <button className="btn primary" style={{ width: "100%", marginTop: 14 }} disabled={busy} onClick={submit}>
               {busy ? "กำลังตรวจสอบ..." : "เข้าสู่ระบบ"}
             </button>
-            {bridgeEnabled() && (
-              <button className="btn link" style={{ width: "100%", marginTop: 8 }} onClick={async () => {
-                if (!window.confirm("ล้างข้อมูลในเบราว์เซอร์นี้แล้วดึงฐานข้อมูลส่วนกลางมาแทน?")) return;
-                clearLocal();
-                const remote = await pullDB();
-                if (remote) saveDB(normalizeDB(remote));
-                location.reload();
-              }}>🔄 ดึงข้อมูลส่วนกลางทับเครื่องนี้</button>
-            )}
-            <div className="row" style={{ justifyContent: "center", marginTop: 10 }}>
-              <button className="btn link" onClick={() => setShowFilen(!showFilen)}>ไม่มีข้อมูลเดิมบน Filen? ดึงมาก่อน</button>
+            <div style={{ textAlign: "center", marginTop: 12 }}>
+              <button className="btn link" style={{ width: "auto", fontSize: ".85em" }} onClick={() => setMode("portal")}>← กลับหน้าสาธารณะ</button>
             </div>
-            {showFilen && (
-              <div className="card" style={{ marginTop: 8 }}>
-                <div className="field"><label>อีเมล Filen</label><input value={fEmail} onChange={e => setFEmail(e.target.value)} /></div>
-                <div className="field"><label>รหัสผ่าน Filen</label><input type="password" value={fPass} onChange={e => setFPass(e.target.value)} /></div>
-                <div className="field"><label>รหัส 2FA (ถ้าเปิด)</label><input value={fTwo} onChange={e => setFTwo(e.target.value)} /></div>
-                <button className="btn" onClick={() => onConnectFilen(fEmail, fPass, fTwo || undefined)}>เชื่อมต่อและดึงข้อมูล</button>
-              </div>
-            )}
-            <button className="btn link" style={{ width: "100%", marginTop: 10 }} onClick={() => setMode("portal")}>← กลับหน้าสาธารณะ</button>
           </div>
         </div>
       </div>
