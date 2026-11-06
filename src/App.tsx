@@ -1,3 +1,4 @@
+import PortalAdmin from "./pages/PortalAdmin";
 import logoUrl from "./assets/logo.png";
 import { bridgeEnabled } from "./lib/bridge";
 import React, { useEffect, useRef, useState } from "react";
@@ -232,13 +233,15 @@ export default function App() {
     <button className={tab === "assets" ? "on" : ""} onClick={() => go("assets")}>ยืม-คืนอุปกรณ์</button>
     <button className={tab === "portfolio" ? "on" : ""} onClick={() => go("portfolio")}>คลังผลงาน</button>
     {isAdmin && <button className={tab === "users" ? "on" : ""} onClick={() => go("users")}>ผู้ใช้งาน</button>}
+    {isAdmin && <button className={tab === "portaladmin" ? "on" : ""} onClick={() => go("portaladmin")}>จัดการหน้าเว็บ</button>}
     {isAdmin && <button className={tab === "audit" ? "on" : ""} onClick={() => go("audit")}>ประวัติการแก้ไข</button>}
     <button className={tab === "settings" ? "on" : ""} onClick={() => go("settings")}>ตั้งค่า</button>
   </nav>
 </header>
 
       <main key={tab} className="page-enter">
-        {tab === "dashboard" && <Dashboard db={dbView} session={session} goTab={setTab} mine={mineOn} />}
+                {tab === "portaladmin" && isAdmin && <PortalAdmin db={db} update={update} session={session} />}
+        {tab === "dashboard" && <Dashboard db={dbView} session={session} goTab={setTab} mine={mineOn} update={update} />}
         {tab === "requests" && <Requests db={dbView} update={update} session={session} viewMine={mineOn} hasLink={!!myStaffName} />}
         {tab === "worklogs" && <WorkLogs db={db} update={update} session={session} />}
         {tab === "assets" && <Assets db={db} update={update} session={session} />}

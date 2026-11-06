@@ -3,7 +3,7 @@ import { DB, Row, Attachment, uid, nowISO } from "./types";
 import { idbSet, idbGet } from "./lib/idb";
 import { filenConnected, uploadAttachment, downloadAttachment } from "./lib/filen";
 import { Session, can } from "./lib/auth";
-import { Modal, fmtDateTime, Badge } from "./ui";
+import { Badge, fmtDateTime, Modal, useFocusScroll } from "./ui";
 
 export type FieldDef = {
   key: string; label: string;
@@ -30,6 +30,7 @@ type Props = {
 
 export default function CrudPage({ dbKey, title, fields, columns, searchKeys, filenFolder, db, update, session, above }: Props) {
   const rows: Row[] = (db as any)[dbKey] ?? [];
+    useFocusScroll((db[dbKey] as Row[]).length);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [editing, setEditing] = useState<Row | null | "new">(null);
@@ -63,7 +64,7 @@ export default function CrudPage({ dbKey, title, fields, columns, searchKeys, fi
         <thead><tr>{columns.map(c => <th key={c.key}>{c.label}</th>)}<th>ไฟล์แนบ</th><th></th></tr></thead>
         <tbody>
           {filtered.map(r => (
-            <tr key={r.id}>
+            <tr key={r.id} data-rowid={r.id}>
               {columns.map(c => (
                 <td key={c.key}>
                   {c.key === "status" ? <Badge>{r.status || "-"}</Badge>

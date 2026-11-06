@@ -1,16 +1,17 @@
 import React, { useMemo, useState } from "react";
 import { DB, Row, uid, nowISO } from "../types";
 import { Session, can } from "../lib/auth";
-import { fmtDateTime, Badge } from "../ui";
+import { fmtDateTime, Badge, useFocusScroll } from "../ui";
 import { uploadAttachment, downloadAttachment, filenConnected } from "../lib/filen";
 
 const ASSET_TYPES = ["กล้องวิดีโอ", "กล้องถ่ายภาพ", "เลนส์", "ขาตั้ง", "ไฟสตูดิโอ", "ไมโครโฟน", "คอมพิวเตอร์", "โดรน", "อื่น ๆ"];
 const ASSET_STATUS = ["อยู่ในคลัง", "ถูกยืม", "ส่งซ่อม", "ชำรุด"];
-type Borrow = { id: string; borrower: string; dept?: string; borrowAt: string; dueAt?: string; returnedAt?: string };
+type Borrow = { id: string; borrower: string; dept?: string; borrowAt: string; dueAt?: string; returnedAt?: string; state?: string };
 
 type Props = { db: DB; update: (fn: (d: DB) => DB, audit?: any) => void; session: Session };
 
 export default function Assets({ db, update, session }: Props) {
+    useFocusScroll(db.assets.length);
   const [q, setQ] = useState("");
   const [person, setPerson] = useState("");
   const [cat, setCat] = useState("");
@@ -67,7 +68,7 @@ export default function Assets({ db, update, session }: Props) {
     if (!borrower.trim()) { alert("กรอกชื่อผู้ยืม"); return; }
     const b: Borrow = {
       id: uid(), borrower: borrower.trim(), dept: dept.trim() || undefined,
-      borrowAt: toISO(borrowAt) ?? nowISO(), dueAt: toISO(dueAt), returnedAt: undefined,
+      borrowAt: toISO(borrowAt) ?? nowISO(), dueAt: toISO(dueAt), returnedAt: undefined, state: "active",
     };
     update(d => ({ ...d, assets: d.assets.map(a => (a.id === row.id ? { ...a, status: "ถูกยืม", borrows: [...(a.borrows ?? []), b] } : a)) }),
       { action: "ยืมอุปกรณ์", entity: "ครุภัณฑ์", summary: `${row.name} → ${borrower.trim()} (${dept.trim() || "ไม่ระบุหน่วยงาน"})` });
@@ -83,6 +84,25 @@ export default function Assets({ db, update, session }: Props) {
         return { ...a, borrows, status: borrows.some((b: Borrow) => !b.returnedAt) ? "ถูกยืม" : "อยู่ในคลัง" };
       }),
     }), { action: "คืนอุปกรณ์", entity: "ครุภัณฑ์", summary: row.name });
+  }
+
+    function confirmBorrow(row: Row, bid: string) {
+    if (!confirm("ยืนยันว่าได้ตรวจสภาพอุปกรณ์และอนุมัติให้ยืมแล้ว?")) return;
+    update(d => ({
+      ...d,
+      assets: d.assets.map(a => (a.id === row.id ? {
+        ...a, status: "ถูกยืม",
+        borrows: (a.borrows ?? []).map((b: Borrow) => (b.id === bid ? { ...b, state: "active" } : b)),
+      } : a)),
+    }), { action: "ยืนยันการยืม", entity: "ครุภัณฑ์", summary: `${row.name} → ${(row.borrows ?? []).find((b: Borrow) => b.id === bid)?.borrower ?? ""}` });
+  }
+
+  function cancelBorrow(row: Row, bid: string) {
+    if (!confirm("ยกเลิกคำขอยืมนี้?")) return;
+    update(d => ({
+      ...d,
+      assets: d.assets.map(a => (a.id === row.id ? { ...a, borrows: (a.borrows ?? []).filter((b: Borrow) => b.id !== bid) } : a)),
+    }), { action: "ยกเลิกคำขอยืม", entity: "ครุภัณฑ์", summary: row.name });
   }
 
   async function attach(f: File, rowId: string) {
@@ -160,7 +180,7 @@ export default function Assets({ db, update, session }: Props) {
         <div className="card">
           <h3>🔄 ประวัติยืม-คืน: {borrowFor.name}</h3>
           <table>
-            <thead><tr><th>ผู้ยืม</th><th>หน่วยงาน</th><th>เวลายืม</th><th>กำหนดคืน</th><th>คืนเมื่อ</th><th></th></tr></thead>
+            <thead><tr><th>ผู้ยืม</th><th>หน่วยงาน</th><th>เวลายืม</th><th>กำหนดคืน</th><th>สถานะ / คืนเมื่อ</th><th></th></tr></thead>
             <tbody>
               {(borrowFor.borrows ?? []).slice().reverse().map((b: Borrow) => (
                 <tr key={b.id}>
@@ -169,14 +189,27 @@ export default function Assets({ db, update, session }: Props) {
                   <td>{fmtDateTime(b.borrowAt)}</td>
                   <td>{b.dueAt ? fmtDateTime(b.dueAt) : "-"}</td>
                   <td>
-                    {b.returnedAt ? fmtDateTime(b.returnedAt) : (
-                      <input type="datetime-local" value={returnTimes[b.id] ?? nowLocal()}
-                        onChange={e => setReturnTimes(m => ({ ...m, [b.id]: e.target.value }))} />
-                    )}
+                    {b.returnedAt ? fmtDateTime(b.returnedAt)
+                      : b.state === "pending" ? <Badge>รอยืนยันการยืม</Badge>
+                      : <Badge>ค้างยืม</Badge>}
                   </td>
-                  <td>{!b.returnedAt && (
-                    <button className="btn" onClick={() => returnBorrow(borrowFor, b.id, toISO(returnTimes[b.id] ?? nowLocal()))}>รับคืน</button>
-                  )}</td>
+                  <td>
+                    <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      {!b.returnedAt && b.state === "pending" && (
+                        <>
+                          <button className="btn primary" onClick={() => confirmBorrow(borrowFor, b.id)}>✅ ยืนยันการยืม</button>
+                          <button className="btn danger" onClick={() => cancelBorrow(borrowFor, b.id)}>ยกเลิกคำขอ</button>
+                        </>
+                      )}
+                      {!b.returnedAt && b.state !== "pending" && (
+                        <>
+                          <input type="datetime-local" value={returnTimes[b.id] ?? nowLocal()}
+                            onChange={e => setReturnTimes(m => ({ ...m, [b.id]: e.target.value }))} />
+                          <button className="btn" onClick={() => returnBorrow(borrowFor, b.id, toISO(returnTimes[b.id] ?? nowLocal()))}>ยืนยันการรับคืน</button>
+                        </>
+                      )}
+                    </span>
+                  </td>
                 </tr>
               ))}
               {(borrowFor.borrows ?? []).length === 0 && <tr><td colSpan={6} className="muted">ยังไม่มีประวัติการยืม</td></tr>}
@@ -206,13 +239,17 @@ export default function Assets({ db, update, session }: Props) {
             <thead><tr><th>รหัส</th><th>เลขครุภัณฑ์</th><th>ชื่อ</th><th>ประเภท</th><th>ผู้รับผิดชอบ</th><th>สถานะ</th><th>ที่เก็บ</th><th>ยืมค้าง</th><th></th></tr></thead>
             <tbody>
               {rows.map(a => (
-                <tr key={a.id}>
+                <tr key={a.id} data-rowid={a.id}>
                   <td>{a.year || "-"}</td>
                   <td>{a.assetCode || "-"}</td>
                   <td>{a.name}</td>
                   <td>{a.type || "-"}</td>
                   <td>{a.holder || <span className="muted">-</span>}</td>
-                  <td><Badge>{a.status || "-"}</Badge></td>
+                  <td>
+                    {(a.borrows ?? []).some((b: any) => !b.returnedAt && b.state === "pending")
+                      ? <Badge>รอยืนยันการยืม</Badge>
+                      : <Badge>{a.status || "-"}</Badge>}
+                  </td>
                   <td>{a.location || "-"}</td>
                   <td>{openCount(a) > 0 ? <Badge>{openCount(a)}</Badge> : "0"}</td>
                   <td className="row">

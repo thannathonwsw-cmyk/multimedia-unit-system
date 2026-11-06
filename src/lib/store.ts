@@ -1,13 +1,16 @@
-import { DB, emptyDB } from "../types";
+import { DB, emptyDB, defaultPortal } from "../types";
 
 const KEY = "mm-system-db-v1";
 
 export function normalizeDB(d: any): DB {
   const base = emptyDB();
   const out: DB = { ...base, ...d };
-    (["requests", "worklogs", "assets", "portfolio", "users", "audit", "staff"] as const).forEach(k => {
+    (["requests", "worklogs", "assets", "portfolio", "users", "audit", "staff", "inquiries"] as const).forEach(k => {
     if (!Array.isArray((out as any)[k])) (out as any)[k] = [];
   });
+    const dp = defaultPortal();
+  out.portal = { ...dp, ...(out.portal ?? {}) };
+  (["mmServices", "avServices"] as const).forEach(k => { if (!Array.isArray((out.portal as any)[k])) (out.portal as any)[k] = dp[k]; });
   out.meta = { ...base.meta, ...(d?.meta ?? {}) };
   return out;
 }

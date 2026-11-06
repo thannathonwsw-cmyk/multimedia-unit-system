@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 
 export function fmtDateTime(v?: string) {
@@ -43,4 +43,22 @@ export function downloadBlob(name: string, blob: Blob) {
   const a = document.createElement("a");
   a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// เลื่อนจอไปหาแถวที่ถูกระบุ + กะพริบแถบไฟ (ใช้ร่วมกับการกระโดดข้ามหน้า)
+export function useFocusScroll(dep?: any) {
+  useEffect(() => {
+    const id = sessionStorage.getItem("mms-focus");
+    if (!id) return;
+    sessionStorage.removeItem("mms-focus");
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-rowid="${id}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("focus-flash");
+        setTimeout(() => el.classList.remove("focus-flash"), 2400);
+      }
+    }, 200);
+    return () => clearTimeout(t);
+  }, [dep]);
 }

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { DB, Row, uid, nowISO } from "../types";
 import { Session, can } from "../lib/auth";
-import { fmtDateTime, Badge } from "../ui";
+import { fmtDateTime, Badge, useFocusScroll } from "../ui";
 
 const PF_TYPES = ["ประชาสัมพันธ์", "สอน/สาธิต", "สารคดี", "ไลฟ์/อีเวนต์", "มิวสิก/ศิลปิน", "อื่น ๆ"];
 const PF_STATUS = ["เผยแพร่", "ภายใน", "ร่าง"];
@@ -45,6 +45,7 @@ function Thumb({ row }: { row: Row }) {
 type Props = { db: DB; update: (fn: (d: DB) => DB, audit?: any) => void; session: Session };
 
 export default function Portfolio({ db, update, session }: Props) {
+    useFocusScroll(db.portfolio.length);
   const [q, setQ] = useState("");
   const [ftype, setFtype] = useState("");
   const [fstatus, setFstatus] = useState("");
@@ -130,7 +131,7 @@ export default function Portfolio({ db, update, session }: Props) {
         {list.map(p => {
           const id = ytId(p.link);
           return (
-            <div key={p.id} className="pf-card">
+            <div key={p.id} className="pf-card" data-rowid={p.id}>
               <Thumb row={p} />
               <div className="pf-body">
                 <div style={{ fontWeight: 700 }}>{p.title}</div>

@@ -23,15 +23,22 @@ export function computeAlerts(db: DB): AlertItem[] {
           if (t < now) out.push({ icon: "🔴", text: `คืนเกินกำหนด: ${a.name}`, sub: `ผู้ยืม ${b.borrower} • กำหนด ${fmtDateTime(b.dueAt)}`, persons: [b.borrower], tab: "assets", id: a.id , level: "over" });
           else if (t - now < week) out.push({ icon: "🟠", text: `ครบกำหนดคืนใน ${Math.max(1, Math.ceil((t - now) / 86400000))} วัน: ${a.name}`, sub: `ผู้ยืม ${b.borrower}`, persons: [b.borrower], tab: "assets", id: a.id , level: "warn" });
   }
+    for (const i of (db.inquiries ?? [])) {
+    if (!i.done) out.push({ icon: "🔵", text: `ข้อความสอบถามใหม่: ${i.name || "ไม่ระบุชื่อ"} (${i.phone})`, sub: String(i.message).slice(0, 80), persons: [], level: "info", tab: "dashboard" });
+  }
+    for (const a of db.assets) for (const b of (a.borrows ?? [])) {
+    if (!b.returnedAt && b.state === "pending") out.push({ icon: "🟠", text: `คำขอยืมรอยืนยัน: ${a.name}`, sub: `ผู้ยืม ${b.borrower} • ยื่น ${fmtDateTime(b.borrowAt)}`, persons: [b.borrower], level: "warn", tab: "assets", id: a.id });
+  }
   return out;
 }
 
 type Ev = { id: string; kind: string; title: string; date: string; from?: string; to?: string; persons: string[]; color: string; status?: string };
-type Props = { db: DB; session: Session; goTab: (t: string) => void; mine?: boolean };
+type Props = { db: DB; session: Session; goTab: (t: string) => void; mine?: boolean; update: (fn: (d: DB) => DB, audit?: any) => void };
 
-export default function Dashboard({ db, session, goTab, mine }: Props) {
-  const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+export default function Dashboard({ db, session, goTab, mine, update }: Props) {
+    const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [dayView, setDayView] = useState<string | null>(null);
+    const [detail, setDetail] = useState<string | null>(null);
 
   const staffNames = useMemo(() => db.staff.map(s => `${s.firstName} ${s.lastName}`), [db.staff]);
   const colorOf = (name?: string) => {
@@ -89,6 +96,24 @@ export default function Dashboard({ db, session, goTab, mine }: Props) {
   const onLoan = db.assets.filter(a => (a.borrows ?? []).some((b: any) => !b.returnedAt)).length;
   const loanOver = db.assets.reduce((n, a) => n + (a.borrows ?? []).filter((b: any) => !b.returnedAt && b.dueAt && new Date(b.dueAt).getTime() < now).length, 0);
   const published = db.portfolio.filter(p => p.status === "เผยแพร่").length;
+    const statDefs = [
+    { key: "ongoing", n: ongoing.length, label: "งานค้างดำเนินการ", c: "#6d8bff" },
+    { key: "due7", n: due7, label: "ครบกำหนดใน 7 วัน", c: "#f59e0b" },
+    { key: "overdue", n: overdue, label: "เลยกำหนดส่ง", c: "#ef4444" },
+    { key: "onloan", n: onLoan, label: "อุปกรณ์ถูกยืมอยู่", c: "#6d8bff" },
+    { key: "loanover", n: loanOver, label: "คืนเกินกำหนด", c: "#ef4444" },
+    { key: "published", n: published, label: "ผลงานเผยแพร่", c: "#a06bff" },
+  ];
+  const nowT = Date.now();
+  const openReq = (r: Row) => ({ id: r.id, title: r.title, sub: `กำหนด ${r.dueAt ? fmtDateTime(r.dueAt) : "-"} • สถานะ ${r.status}`, tab: "requests", persons: namesOf(r) });
+  const detailItems: { id: string; title: string; sub: string; tab: string; persons: string[] }[] =
+    detail === "ongoing" ? db.requests.filter(r => r.status === "กำลังดำเนินการ").map(openReq)
+    : detail === "due7" ? db.requests.filter(r => !["เสร็จสิ้น", "ยกเลิก"].includes(r.status) && r.dueAt && new Date(r.dueAt).getTime() > nowT && new Date(r.dueAt).getTime() - nowT < 7 * 86400000).map(openReq)
+    : detail === "overdue" ? db.requests.filter(r => !["เสร็จสิ้น", "ยกเลิก"].includes(r.status) && r.dueAt && new Date(r.dueAt).getTime() < nowT).map(openReq)
+    : detail === "onloan" ? db.assets.filter(a => (a.borrows ?? []).some((b: any) => !b.returnedAt)).map(a => ({ id: a.id, title: a.name, sub: `ผู้ยืม: ${(a.borrows ?? []).filter((b: any) => !b.returnedAt).map((b: any) => b.borrower).join(", ") || "-"}`, tab: "assets", persons: [] as string[] }))
+    : detail === "loanover" ? db.assets.flatMap(a => (a.borrows ?? []).filter((b: any) => !b.returnedAt && b.dueAt && new Date(b.dueAt).getTime() < nowT).map((b: any) => ({ id: a.id, title: a.name, sub: `ผู้ยืม ${b.borrower} • กำหนดคืน ${fmtDateTime(b.dueAt)}`, tab: "assets", persons: [b.borrower] as string[] })))
+    : detail === "published" ? db.portfolio.filter(p => p.status === "เผยแพร่").map(p => ({ id: p.id, title: p.title, sub: p.finishedAt ? fmtDateTime(p.finishedAt) : "-", tab: "portfolio", persons: [] as string[] }))
+    : [];
   const monthLabel = new Date(cursor.y, cursor.m, 1).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
   const thDate = (key: string) => new Date(key + "T00:00:00").toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
@@ -108,20 +133,40 @@ export default function Dashboard({ db, session, goTab, mine }: Props) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-        {([
-          [ongoing.length, "งานค้างดำเนินการ", "#6d8bff"],
-          [due7, "ครบกำหนดใน 7 วัน", "#f59e0b"],
-          [overdue, "เลยกำหนดส่ง", "#ef4444"],
-          [onLoan, "อุปกรณ์ถูกยืมอยู่", "#6d8bff"],
-          [loanOver, "คืนเกินกำหนด", "#ef4444"],
-          [published, "ผลงานเผยแพร่", "#a06bff"],
-        ] as [number, string, string][]).map(([n, label, c], i) => (
-          <div key={i} className="card stat-card">
-            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: c }}>{n}</div>
-            <div className="muted">{label}</div>
+        {statDefs.map(s => (
+          <div key={s.key} className={"card stat-card" + (detail === s.key ? " stat-on" : "")}
+            style={{ cursor: "pointer" }} title={`คลิกดูรายการ: ${s.label}`}
+            onClick={() => setDetail(d => (d === s.key ? null : s.key))}>
+            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: s.c }}>{s.n}</div>
+            <div className="muted">{s.label}</div>
           </div>
         ))}
       </div>
+
+      {detail && (
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+            <h3>📋 รายละเอียด: {statDefs.find(s => s.key === detail)?.label} ({detailItems.length} รายการ)</h3>
+            <button className="btn" onClick={() => setDetail(null)}>ปิด</button>
+          </div>
+          <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+            {detailItems.map((it, i) => (
+              <div key={it.id + i} className="day-bar alert-click"
+                style={{ borderLeftColor: statDefs.find(s => s.key === detail)?.c }}
+                title="คลิกเพื่อกระโดดไปงานนี้"
+                onClick={() => { sessionStorage.setItem("mms-focus", it.id); goTab(it.tab); }}>
+                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <strong>{it.title}</strong>
+                  <Badge>{it.tab === "requests" ? "คำขอใช้บริการ" : it.tab === "assets" ? "ยืม-คืนอุปกรณ์" : "คลังผลงาน"}</Badge>
+                </div>
+                <div className="muted" style={{ fontSize: ".85em" }}>{it.sub}</div>
+                {it.persons.length > 0 && <Persons list={it.persons} />}
+              </div>
+            ))}
+            {detailItems.length === 0 && <div className="muted">ไม่มีรายการในกลุ่มนี้</div>}
+          </div>
+        </div>
+      )}
 
       <div className="dash-cols" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr)", gap: 14 }}>
         <div className="card">
@@ -199,6 +244,23 @@ export default function Dashboard({ db, session, goTab, mine }: Props) {
           </div>
 
           <div className="card">
+            <h3>💬 สอบถามจากภายนอก ({(db.inquiries ?? []).filter(i => !i.done).length})</h3>
+            <div style={{ display: "grid", gap: 8 }}>
+              {(db.inquiries ?? []).filter(i => !i.done).slice(0, 5).map(i => (
+                <div key={i.id} className="day-bar" style={{ borderLeftColor: "#06b6d4" }}>
+                  <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                    <strong>{i.name || "ไม่ระบุชื่อ"} • {i.phone}</strong>
+                    <button className="btn" onClick={() => update(d => ({ ...d, inquiries: (d.inquiries ?? []).map(x => (x.id === i.id ? { ...x, done: true } : x)) }), { action: "ปิดข้อความสอบถาม", entity: "inquiries", summary: i.phone })}>จัดการแล้ว</button>
+                  </div>
+                  <div className="muted" style={{ fontSize: ".85em" }}>{i.message}</div>
+                  <div className="muted" style={{ fontSize: ".8em" }}>{fmtDateTime(i.createdAt)}</div>
+                </div>
+              ))}
+              {(db.inquiries ?? []).filter(i => !i.done).length === 0 && <div className="muted">ไม่มีข้อความค้าง</div>}
+            </div>
+          </div>
+
+          <div className="card">
             <h3>⚙️ งานที่กำลังดำเนินการ</h3>
             <div style={{ display: "grid", gap: 8 }}>
               {ongoing.map(r => (
@@ -218,7 +280,7 @@ export default function Dashboard({ db, session, goTab, mine }: Props) {
           <div className="card">
             <h3>🕘 กิจกรรมล่าสุด</h3>
             <div style={{ display: "grid", gap: 6 }}>
-              {db.audit.slice(-6).reverse().map(a => (
+              {db.audit.slice().sort((a, b) => String(b.at ?? "").localeCompare(String(a.at ?? ""))).slice(0, 6).map(a => (
                 <div key={a.id} className="day-bar" style={{ borderLeftColor: "#6d8bff" }}>
                   <strong>{a.action}</strong>
                   <div className="muted" style={{ fontSize: ".85em" }}>{fmtDateTime(a.at)} • {a.username} • {a.summary ?? ""}</div>

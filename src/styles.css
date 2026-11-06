@@ -365,3 +365,83 @@ html[data-theme="light"] .stat-card:hover {
 /* ===== การ์ดแจ้งเตือน: ชี้แล้วขยับ + คลิกได้ ===== */
 .alert-click { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
 .alert-click:hover { transform: translateX(5px); box-shadow: 0 8px 22px rgba(0,0,0,.20); }
+
+/* ===== แถบไฟชี้เป้าเมื่อกระโดดข้ามหน้า ===== */
+.focus-flash {
+  outline: 3px solid #f59e0b !important;
+  box-shadow: 0 0 0 8px rgba(245, 158, 11, .28);
+  animation: flashPulse 1.2s ease 2;
+}
+@keyframes flashPulse {
+  0%, 100% { box-shadow: 0 0 0 8px rgba(245, 158, 11, .28); }
+  50% { box-shadow: 0 0 0 14px rgba(245, 158, 11, .12); }
+}
+.stat-on { outline: 2px solid #6d8bff; }
+
+/* ===== หน้าเว็บสาธารณะของหน่วย ===== */
+.portal-wrap { max-width: 980px; margin: 0 auto; padding: 16px 14px 40px; display: grid; gap: 16px; }
+.portal-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.portal-logo { height: 3em; width: 3em; object-fit: contain; }
+.portal-brand { font-weight: 800; font-size: 1.15em; }
+.portal-hero {
+  border-radius: 22px; padding: 46px 26px; text-align: center; color: #fff;
+  background: linear-gradient(135deg, rgba(91,124,250,.92), rgba(154,107,250,.88)),
+              radial-gradient(circle at 20% 20%, rgba(255,255,255,.25), transparent 45%);
+  box-shadow: 0 18px 50px rgba(80,100,255,.35);
+}
+.portal-hero h1 { margin: 0 0 10px; font-size: 1.7em; line-height: 1.35; text-shadow: 0 2px 10px rgba(0,0,0,.3); }
+.portal-motto { margin: 0; font-size: 1.02em; opacity: .95; }
+.portal-pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.portal-pillars .card { display: grid; gap: 6px; justify-items: center; text-align: center; }
+.portal-services { display: grid; gap: 12px; justify-items: center; text-align: center; }
+.chip { padding: 6px 12px; border-radius: 999px; background: var(--glass-input, rgba(255,255,255,.08)); border: 1px solid var(--line, rgba(255,255,255,.15)); font-size: .88em; }
+.portal-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+.portal-big { padding: 14px 26px; font-size: 1.05em; border-radius: 16px; }
+.portal-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 10px; }
+.portal-asset {
+  display: grid; gap: 4px; text-align: left; cursor: pointer; padding: 10px 12px; border-radius: 14px;
+  border: 1px solid var(--line, rgba(255,255,255,.15)); background: var(--glass-input, rgba(255,255,255,.05)); color: var(--text, #eef1f7);
+}
+.portal-asset.on { outline: 2px solid #6d8bff; background: rgba(109,139,255,.14); }
+.portal-foot { text-align: center; font-size: .85em; }
+@media (max-width: 640px) { .portal-hero { padding: 32px 16px; } .portal-hero h1 { font-size: 1.3em; } }
+
+/* ===== หน้าสาธารณะฉบับสมบูรณ์ ===== */
+.portal-logo { height: 4.6em; width: 7.0em; object-fit: contain; filter: drop-shadow(0 3px 8px rgba(0,0,0,.25)); }
+.portal-brand { font-size: 1.0em; }
+.portal-group {
+  margin-top: 14px; padding: 12px 14px; border-radius: 14px;
+  border: 1px solid var(--line, rgba(255,255,255,.14));
+  background: var(--glass-input, rgba(255,255,255,.04));
+}
+.portal-group h4 { margin: 0 0 10px; }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.check-item {
+  display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px;
+  border-radius: 10px; border: 1px solid transparent; cursor: pointer; font-size: .92em;
+}
+.check-item:hover { background: rgba(109,139,255,.10); }
+.check-item.on { border-color: #6d8bff; background: rgba(109,139,255,.14); }
+.check-item input { margin-top: 3px; }
+
+/* ===== ป้ายวิ่งบริการ: 2 แถว เลื่อนขวา→ซ้ายช้า ๆ ===== */
+.marquee {
+  overflow: hidden; position: relative; width: 100%;
+  padding: 8px 0; border-radius: 14px;
+  border: 1px solid var(--line, rgba(255,255,255,.12));
+  background: var(--glass-input, rgba(255,255,255,.05));
+}
+.marquee-track {
+  display: flex; align-items: center; gap: 10px;
+  width: max-content; padding: 2px 0;
+  animation: marqueeScroll 55s linear infinite;
+}
+.marquee-track.marquee-slow { animation-duration: 40s; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+.marquee-label { font-weight: 800; white-space: nowrap; margin: 0 4px 0 12px; }
+.marquee .chip { white-space: nowrap; }
+@keyframes marqueeScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) { .marquee-track { animation: none; } }
